@@ -412,7 +412,6 @@ def main(page: Page):
     page.add(main_container)
     page.update()
 
-    # Ensure the database and table are created
     Database.connect_to_database()
 
 if __name__ == "__main__":
