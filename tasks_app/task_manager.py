@@ -10,13 +10,12 @@ db_path = os.path.join(os.path.dirname(__file__), "tm.db")
 class Database:
     @staticmethod
     def connect_to_database():
-        
         with sqlite3.connect(db_path) as db:
             db.execute("""
                 CREATE TABLE IF NOT EXISTS tasks (
-                    id INTEGER PRIMARY KEY,
-                    Task VARCHAR(255) NOT NULL,
-                    Date VARCHAR(255) NOT NULL
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Task TEXT NOT NULL,
+                    Date TEXT NOT NULL
                 )
             """)
             db.commit()
@@ -24,250 +23,193 @@ class Database:
     @staticmethod
     def read_database():
         with sqlite3.connect(db_path) as db:
-            df = pd.read_sql_query("SELECT Task, Date FROM tasks", db)
-        return df.values.tolist()
+            return pd.read_sql_query("SELECT Task, Date FROM tasks", db).values.tolist()
 
     @staticmethod
     def insert_into_database(values):
         with sqlite3.connect(db_path) as db:
-            df = pd.DataFrame([values], columns=["Task", "Date"])
-            df.to_sql("tasks", db, if_exists="append", index=False)
-
-    @staticmethod
-    def delete_task_from_database(value):
-        with sqlite3.connect(db_path) as db:
-            db.execute("DELETE FROM tasks WHERE Task=?", value)
+            db.execute("INSERT INTO tasks (Task, Date) VALUES (?, ?)", values)
             db.commit()
 
     @staticmethod
-    def update_task_in_database(value):
+    def delete_task_from_database(task):
         with sqlite3.connect(db_path) as db:
-            db.execute("UPDATE tasks SET Task=? WHERE Task=?", value)
+            db.execute("DELETE FROM tasks WHERE Task = ?", (task,))
             db.commit()
 
-class FormContainer(UserControl):
-    def __init__(self, func):
-        self.func = func
-        super().__init__()
+    @staticmethod
+    def update_task_in_database(old_task, new_task):
+        with sqlite3.connect(db_path) as db:
+            db.execute("UPDATE tasks SET Task = ? WHERE Task = ?", (new_task, old_task))
+            db.commit()
 
-    def build(self):
-        return Container(
-            width=280,
-            height=80,
-            opacity=0,
-            gradient=LinearGradient(
-                begin=alignment.bottom_left,
-                end=alignment.top_right,
-                colors=["bluegrey300", "bluegrey400", "bluegrey500", "bluegrey700"],
-            ),
-            border_radius=40,
-            margin=margin.only(left=-20, right=-20),
-            animate=animation.Animation(400, "decelerate"),
-            animate_opacity=200,
-            clip_behavior=ClipBehavior.HARD_EDGE,
-            padding=padding.only(top=45, bottom=45),
-            content=Column(
-                horizontal_alignment=CrossAxisAlignment.CENTER,
-                controls=[
-                    TextField(
-                        height=48,
-                        width=255,
-                        text_size=12,
-                        color="black",
-                        border_radius=8,
-                        bgcolor="#f0f3f6",
-                        border_color="transparent",
-                        filled=True,
-                        cursor_color="black",
-                        cursor_width=1,
-                        hint_text="Description...",
-                        hint_style=TextStyle(
-                            size=11,
-                            color="black",
+def create_form_container(add_task_callback):
+    return Container(
+        width=280,
+        height=80,
+        opacity=0,
+        gradient=LinearGradient(
+            begin=alignment.bottom_left,
+            end=alignment.top_right,
+            colors=["bluegrey300", "bluegrey400", "bluegrey500", "bluegrey700"],
+        ),
+        border_radius=40,
+        margin=margin.only(left=-20, right=-20),
+        animate=animation.Animation(400, "decelerate"),
+        animate_opacity=200,
+        clip_behavior=ClipBehavior.HARD_EDGE,
+        padding=padding.only(top=45, bottom=45),
+        content=Column(
+            horizontal_alignment=CrossAxisAlignment.CENTER,
+            controls=[
+                TextField(
+                    height=48,
+                    width=255,
+                    text_size=12,
+                    color="black",
+                    border_radius=8,
+                    bgcolor="#f0f3f6",
+                    border_color="transparent",
+                    filled=True,
+                    cursor_color="black",
+                    cursor_width=1,
+                    hint_text="Description...",
+                    hint_style=TextStyle(size=11, color="black"),
+                ),
+                IconButton(
+                    content=Text("Add Task"),
+                    width=180,
+                    height=44,
+                    style=ButtonStyle(
+                        bgcolor={"": "black"},
+                        shape={"": RoundedRectangleBorder(radius=8)},
+                    ),
+                    on_click=add_task_callback,
+                ),
+            ],
+        ),
+    )
+
+def create_task_container(task, date, delete_callback, update_callback):
+    def show_icons(e):
+        icons_row = e.control.content.controls[1]
+        opacity = 1 if e.data == "true" else 0
+        icons_row.controls[0].opacity = opacity
+        icons_row.controls[1].opacity = opacity
+        icons_row.update()
+
+    # Pasamos el task_container como dato al IconButton para facilitar el acceso
+    task_container = Container(
+        width=280,
+        height=60,
+        border=border.all(0.85, "white54"),
+        border_radius=8,
+        on_hover=show_icons,
+        clip_behavior=ClipBehavior.HARD_EDGE,
+        padding=10,
+        animate=200,
+        content=Row(
+            alignment=MainAxisAlignment.SPACE_BETWEEN,
+            controls=[
+                Column(
+                    spacing=1,
+                    alignment=MainAxisAlignment.CENTER,
+                    controls=[
+                        Text(value=task, size=10, overflow=TextOverflow.FADE),
+                        Text(value=date, size=9, color="white54"),
+                    ],
+                ),
+                Row(
+                    spacing=0,
+                    alignment=MainAxisAlignment.END,
+                    controls=[
+                        IconButton(
+                            icon=icons.DELETE_ROUNDED,
+                            width=30,
+                            icon_size=18,
+                            icon_color="red700",
+                            opacity=0,
+                            animate_opacity=200,
+                            on_click=lambda e: delete_callback(e, task_container),
                         ),
-                    ),
-                    IconButton(
-                        content=Text("Add Task"),
-                        width=180,
-                        height=44,
-                        style=ButtonStyle(
-                            bgcolor={"": "black"},
-                            shape={"": RoundedRectangleBorder(radius=8)},
+                        IconButton(
+                            icon=icons.EDIT_ROUNDED,
+                            width=30,
+                            icon_size=18,
+                            icon_color="white70",
+                            opacity=0,
+                            animate_opacity=200,
+                            on_click=lambda e: update_callback(e, task_container),
                         ),
-                        on_click=self.func,
-                    ),
-                ],
-            ),
-        )
-
-class CreateTask(UserControl):
-    def __init__(self, task: str, date: str, func1, func2):
-        self.task = task
-        self.date = date
-        self.func1 = func1
-        self.func2 = func2
-        super().__init__()
-
-    def ShowIcons(self, e):
-        if e.data == "true":
-            (
-                e.control.content.controls[1].controls[0].opacity,
-                e.control.content.controls[1].controls[1].opacity,
-            ) = (1, 1)
-
-            e.control.content.update()
-        else:
-            (
-                e.control.content.controls[1].controls[0].opacity,
-                e.control.content.controls[1].controls[1].opacity,
-            ) = (0, 0)
-
-            e.control.content.update()
-
-    def GetContainerInstnace(self, e):
-        return self
-
-    def TaskDeleteEdit(self, name, color, func):
-        return IconButton(
-            icon=name,
-            width=30,
-            icon_size=18,
-            icon_color=color,
-            opacity=0,
-            animate_opacity=200,
-            on_click=lambda e: func(self.GetContainerInstnace(e)),
-        )
-
-    def build(self):
-        return Container(
-            width=280,
-            height=60,
-            border=border.all(0.85, "white54"),
-            border_radius=8,
-            on_hover=lambda e: self.ShowIcons(e),
-            clip_behavior=ClipBehavior.HARD_EDGE,
-            padding=10,
-            animate=200,
-            content=Row(
-                alignment=MainAxisAlignment.SPACE_BETWEEN,
-                controls=[
-                    Column(
-                        spacing=1,
-                        alignment=MainAxisAlignment.CENTER,
-                        controls=[
-                            Text(value=self.task, size=10, overflow="fade"),
-                            Text(value=self.date, size=9, color="white54"),
-                        ],
-                    ),
-                    Row(
-                        spacing=0,
-                        alignment=MainAxisAlignment.END,
-                        controls=[
-                            self.TaskDeleteEdit(
-                                icons.DELETE_ROUNDED,
-                                "red700",
-                                self.func1,
-                            ),
-                            self.TaskDeleteEdit(
-                                icons.EDIT_ROUNDED,
-                                "white70",
-                                self.func2,
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-        )
+                    ],
+                ),
+            ],
+        ),
+    )
+    return task_container
 
 def main(page: Page):
-    page.vertical_alignment = "center"
-    page.horizontal_alignment = "center"
+    page.vertical_alignment = MainAxisAlignment.CENTER
+    page.horizontal_alignment = CrossAxisAlignment.CENTER
 
-    def AddTaskToScreen(e):
-        dateTime = datetime.now().strftime("%b %d, %Y  %H:%M")
-        Database.insert_into_database((form.content.controls[0].value, dateTime))
-
-        if form.content.controls[0].value:
-            _main_column_.controls.append(
-                CreateTask(
-                    form.content.controls[0].value,
-                    dateTime,
-                    DeleteFunction,
-                    UpdateFunction,
-                )
+    def add_task(e):
+        date_time = datetime.now().strftime("%b %d, %Y  %H:%M")
+        task_text = form.content.controls[0].value
+        if task_text:
+            Database.insert_into_database((task_text, date_time))
+            main_column.controls.append(
+                create_task_container(task_text, date_time, delete_task, update_task)
             )
-            _main_column_.update()
-            CreateToDoTask(e)
-        else:
-            pass
+            main_column.update()
+            toggle_form(e)
 
-    def DeleteFunction(e):
-        Database.delete_task_from_database(
-            (e.controls[0].content.controls[0].controls[0].value,)
-        )
-
-        e.controls[0].height = 0
-        e.controls[0].update()
+    def delete_task(e, task_container):
+        task_text = task_container.content.controls[0].controls[0].value
+        Database.delete_task_from_database(task_text)
+        task_container.height = 0
+        task_container.update()
         time.sleep(0.2)
-        _main_column_.controls.remove(e)
-        _main_column_.update()
+        main_column.controls.remove(task_container)
+        main_column.update()
 
-    def UpdateFunction(e):
+    def update_task(e, task_container):
         form.height, form.opacity = 200, 1
-
-        (
-            form.content.controls[0].value,
-            form.content.controls[1].content.value,
-            form.content.controls[1].on_click,
-        ) = (
-            e.controls[0].content.controls[0].controls[0].value,
-            "Update Task",
-            lambda _: FinalizeUpdate(e),
-        )
+        form.content.controls[0].value = task_container.content.controls[0].controls[0].value
+        form.content.controls[1].content.value = "Update Task"
+        form.content.controls[1].on_click = lambda e: finalize_update(task_container)
         form.update()
 
-    def FinalizeUpdate(e):
-        Database.update_task_in_database(
-            (
-                form.content.controls[0].value,
-                e.controls[0].content.controls[0].controls[0].value,
-            ),
-        )
+    def finalize_update(task_container):
+        old_task = task_container.content.controls[0].controls[0].value
+        new_task = form.content.controls[0].value
+        Database.update_task_in_database(old_task, new_task)
+        task_container.content.controls[0].controls[0].value = new_task
+        task_container.update()
+        toggle_form(None)
 
-        e.controls[0].content.controls[0].controls[0].value = form.content.controls[
-            0
-        ].value
-        e.controls[0].content.update()
-        CreateToDoTask(e)
-
-    def CreateToDoTask(e):
+    def toggle_form(e):
         if form.height != 200:
             form.height, form.opacity = 200, 1
-            form.update()
         else:
             form.height, form.opacity = 80, 0
-            form.content.controls[0].value = None
+            form.content.controls[0].value = ""
             form.content.controls[1].content.value = "Add Task"
-            form.content.controls[1].on_click = lambda e: AddTaskToScreen(e)
-            form.update()
+            form.content.controls[1].on_click = add_task
+        form.update()
 
-    _main_column_ = Column(
-        scroll="hidden",
+    main_column = Column(
+        scroll=ScrollMode.HIDDEN,
         expand=True,
         alignment=MainAxisAlignment.START,
         controls=[
             Row(
                 alignment=MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
-                    Text(
-                        "To-Do Items",
-                        size=18,
-                        weight="bold",
-                    ),
+                    Text("To-Do Items", size=18, weight=FontWeight.BOLD),
                     IconButton(
                         icons.ADD_CIRCLE_ROUNDED,
                         icon_size=18,
-                        on_click=lambda e: CreateToDoTask(e),
+                        on_click=toggle_form,
                     ),
                 ],
             ),
@@ -275,30 +217,25 @@ def main(page: Page):
         ],
     )
 
+    form = create_form_container(add_task)
+    
     page.add(
         Container(
-            width=1500,
-            height=900,
-            margin=-10,
+            width=2000,
+            height=800,
+            margin=-100,
             gradient=LinearGradient(
                 begin=alignment.bottom_left,
                 end=alignment.top_right,
                 colors=[
-                    "#e2e8f0",
-                    "#cbd5e1",
-                    "#94a3b8",
-                    "#64748b",
-                    "#475569",
-                    "#334155",
-                    "#1e293b",
-                    "#0f172a",
+                    "#e2e8f0", "#cbd5e1", "#94a3b8", "#64748b",
+                    "#475569", "#334155", "#1e293b", "#0f172a",
                 ],
             ),
             alignment=alignment.center,
-            padding=padding.only(right=110),
-            content=Row(
-                alignment=MainAxisAlignment.END,
-                vertical_alignment=CrossAxisAlignment.CENTER,
+            content=Column(
+                alignment=MainAxisAlignment.CENTER,
+                horizontal_alignment=CrossAxisAlignment.CENTER,
                 controls=[
                     Container(
                         width=280,
@@ -311,32 +248,18 @@ def main(page: Page):
                         content=Column(
                             alignment=MainAxisAlignment.SPACE_BETWEEN,
                             expand=True,
-                            controls=[
-                                _main_column_,
-                                FormContainer(lambda e: AddTaskToScreen(e)),
-                            ],
+                            controls=[main_column, form],
                         ),
                     ),
                 ],
             ),
         )
     )
+
+    Database.connect_to_database()
+    for task, date in Database.read_database()[::-1]:
+        main_column.controls.append(create_task_container(task, date, delete_task, update_task))
     page.update()
 
-    form = page.controls[0].content.controls[0].content.controls[1].controls[0]
-    
-    Database.connect_to_database()
-
-    for task in Database.read_database()[::-1]:
-        _main_column_.controls.append(
-            CreateTask(
-                task[0],
-                task[1],
-                DeleteFunction,
-                UpdateFunction,
-            )
-        )
-    _main_column_.update()
-
 if __name__ == "__main__":
-    app(target=main)
+    app(main)

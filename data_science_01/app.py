@@ -41,7 +41,7 @@ class DataVisualization(ft.UserControl):
 def load_and_process_data():
     try:
         # Carga, filtrado y procesamiento de datos
-        sales_data = pd.read_csv("data_science_01/sales.csv")
+        sales_data = pd.read_csv("sales.csv")
 
         sales_data = sales_data.replace("n.a.", pd.NA).dropna()
 
